@@ -100,34 +100,8 @@ def compute_rigid_transform(source, target):
 
     return R, t
 
-def ICP(src_cloud, tar_cloud, max_iter=100, tolerance=0.001):
-    for i in range(max_iter):
-        # 步骤 1：寻找源点集的最近邻点
-        nearest_idx = find_nearest_neighbors_gpu(src_cloud, tar_cloud)
 
-        # 步骤 2：根据最近邻点计算刚体变换
-        matched_target = tar_cloud[nearest_idx]
-        R, t = compute_rigid_transform(src_cloud, matched_target)
-
-        # 步骤 3：应用刚体变换
-        src_cloud = (R @ src_cloud.T).T + t
-
-        # 计算当前误差（均方误差）
-        error = np.mean(np.linalg.norm(src_cloud - matched_target, axis=1))
-
-        print(f"第 {i+1} 次迭代, 误差: {error}")
-
-        # 步骤 4：检查收敛条件
-        if error < tolerance:
-            print(f"ICP 收敛于第 {i+1} 次迭代，误差: {error}")
-            break
-    else:
-        print(f"ICP 达到最大迭代次数 {max_iter}，误差: {error}")
-
-    return R, t
-
-
-#搜索用于icp的点云块
+#搜索点云块
 def radiusSearch(pc, point, radius):
     #在点云中搜索以point为中心半径为radius内的点
     pc_tree = KDTree(pc[:, :3])
@@ -145,7 +119,9 @@ def icpPointsPick(pc1, pc2, gps1, gps2, pair_num, radius):
     #存储距离和索引
     closest_points = [(i, indices[i], distances[i]) for i in range(len(gps1))]
     #排序取需要的前n对索引
+
     min_dis = 0  # 预设的最小距离阈值
+
     filtered_points = [p for p in closest_points if p[2] > min_dis]
     closest_points_sorted = sorted(filtered_points, key=lambda x: x[2])[:pair_num]
 
@@ -240,14 +216,13 @@ if __name__ == '__main__':
     gps2_path = "./gps2.txt"
     path1 = "./path1.txt"
     path2 = "./path2.txt"
-    fusion_save_path = "colormap.pcd"
 
     #算法参数
     icp_max_iter = 10000
     icp_tolerance = 0.001
     search_pair_num = 50
     total_num = search_pair_num * 2
-    search_radius = 15 #15good
+    search_radius = 10 #15good
     voxel_size = 4
     
     #获取转换为绝对xy坐标的原始gps数据
@@ -291,89 +266,27 @@ if __name__ == '__main__':
     pc1_array = np.hstack((pc1_xyz, pc1_intensity.reshape(-1, 1)))
     pc2_array = np.hstack((pc2_xyz, pc2_intensity.reshape(-1, 1)))
 
-    #将初变换后点云转回pcl格式
-    pc1_fixed = arrayToPC(pc1_array, pc1)
-    pc2_fixed = arrayToPC(pc2_array, pc2)
+    # #将初变换后点云转回pcl格式
+    # pc1_fixed = arrayToPC(pc1_array, pc1)
+    # pc2_fixed = arrayToPC(pc2_array, pc2)
 
-    #点云体素化下采样用于优化ICP结果
-    pc1_ds = pcl.PointCloud.PointXYZI()
-    pc2_ds = pcl.PointCloud.PointXYZI()
+    # #点云体素化下采样用于优化ICP结果
+    # pc1_ds = pcl.PointCloud.PointXYZI()
+    # pc2_ds = pcl.PointCloud.PointXYZI()
 
-    # pcl_voxel = pcl.filters.VoxelGrid.PointXYZI()
-    # pcl_voxel.setLeafSize(voxel_size, voxel_size, voxel_size)
-    # pcl_voxel.setInputCloud(pc1_fixed)
-    # pcl_voxel.filter(pc1_ds)
-    # pcl_voxel.setInputCloud(pc2_fixed)
-    # pcl_voxel.filter(pc2_ds)
+    # pc1_ds = pclpy.octree_voxel_downsample(pc1_fixed, 4)
+    # pc2_ds = pclpy.octree_voxel_downsample(pc2_fixed, 4)
 
-    pc1_ds = pclpy.octree_voxel_downsample(pc1_fixed, 4)
-    pc2_ds = pclpy.octree_voxel_downsample(pc2_fixed, 4)
-
-    pc1_ds_array = pcToArray(pc1_ds)
-    pc2_ds_array = pcToArray(pc2_ds)
+    # pc1_ds_array = pcToArray(pc1_ds)
+    # pc2_ds_array = pcToArray(pc2_ds)
 
     #FPFH特征提取
     fpfh = pcl.features.FPFHEstimation.PointXYZ_Normal_FPFHSignature33()
 
-
-
-    #icp点云块选取
-    #icp_pc = icpPointsPick(pc1_ds_array, pc2_ds_array, origin_gps1, origin_gps2, search_pair_num, search_radius)
-    icp_pc = icpPointsPick(pc1_array, pc2_array, origin_gps1, origin_gps2, search_pair_num, search_radius)#不用下采样
+    #点云块选取
+    #icp_pc = icpPointsPick(pc1ds_array, pc2_ds_array, origin_gps1, origin_gps2, search_pair_num, search_radius
+    icp_pc = icpPointsPick(pc1_array, pc2_array, origin_gps1, origin_gps2, search_pair_num, search_radius) #不用下采样
     print("len_icp:",len(icp_pc))
     #print(icp_pc)
 
-    #对获取的点云对分别做icp，获取多组变换结果，取平均
-    transformsR = []
-    transformsT = []
-    for i in range(len(icp_pc)):
-        print("计算第",i+1,"对点云ICP......")
-        R, t = ICP(icp_pc[i][1], icp_pc[i][0], icp_max_iter, icp_tolerance)
-        print(t)
-        transformsR.append(R)
-        transformsT.append(t)
-    R = np.zeros((3, 3))
-    t = np.zeros((1, 3))
-    for i in range(len(transformsR)):
-        R += transformsR[i]
-        t += transformsT[i]
-    R /= len(transformsR)
-    t /= len(transformsT)
-
-    #将变换应用到第二张地图
-    pc2_array = (R @ pc2_array.T).T + t
-
-    #将变换后的点云转换回pcl点云
-    pc1 = arrayToPC(pc1_array, pc1)
-    pc2 = arrayToPC(pc2_array, pc2)
-
-    #效果展示用文件
-    color_pc = pcl.PointCloud.PointXYZRGB()
-    color_pc.header = pc1.header
-
-    for i in range(len(pc1.points)):
-        color_p = pcl.point_types.PointXYZRGB()
-        color_p.x = pc1.points[i].x
-        color_p.y = pc1.points[i].y
-        color_p.z = pc1.points[i].z
-        color_p.r = 255
-        color_p.g = 0
-        color_p.b = 0
-        color_pc.points.append(color_p)
-    
-    for i in range(len(pc2.points)):
-        color_p = pcl.point_types.PointXYZRGB()
-        color_p.x = pc2.points[i].x
-        color_p.y = pc2.points[i].y
-        color_p.z = pc2.points[i].z
-        color_p.r = 0
-        color_p.g = 0
-        color_p.b = 255
-        color_pc.points.append(color_p)
-    
-    color_pc.width = len(color_pc.points)
-    color_pc.height = 1
-
-    pcl.io.savePCDFileASCII(fusion_save_path, color_pc)
-    print("color map Saved")
 

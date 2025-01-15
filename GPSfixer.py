@@ -10,6 +10,7 @@ ds_num = 1000
 
 #对齐odom和gps，获取对齐所需变换
 def pathsAlign(odom, gps):
+    global showFig
     gps0 = np.array([[row[0]-gps[0][0],row[1]-gps[0][1],row[2]-gps[0][2]] for row in gps])
     H = odom.T @ gps0  # 协方差矩阵
     U, _, Vt = np.linalg.svd(H)
@@ -18,17 +19,18 @@ def pathsAlign(odom, gps):
 
     odomfix = (R @ odom.T).T
 
-    X1 = odomfix[:,0]
-    Y1 = odomfix[:,1]
-    X2 = gps0[:,0]
-    Y2 = gps0[:,1]
+    if showFig:
+        X1 = odomfix[:,0]
+        Y1 = odomfix[:,1]
+        X2 = gps0[:,0]
+        Y2 = gps0[:,1]
 
-    #绘图
-    fig,ax = plt.subplots()
-    ax.plot(X1,Y1)
-    ax.plot(X2,Y2)
-    ax.set_aspect('equal')
-    plt.show()
+        #绘图
+        fig,ax = plt.subplots()
+        ax.plot(X1,Y1)
+        ax.plot(X2,Y2)
+        ax.set_aspect('equal')
+        plt.show()
 
     return R, gps0
     
@@ -76,10 +78,12 @@ def millerToXY (lon, lat):
 
 #draw
 def drawfigure(X, Y):
-    fig,ax = plt.subplots()
-    ax.plot(X,Y)
-    ax.set_aspect('equal')
-    plt.show()
+    global showFig
+    if showFig:
+        fig,ax = plt.subplots()
+        ax.plot(X,Y)
+        ax.set_aspect('equal')
+        plt.show()
 
 #读取odom文件，获取XY坐标
 def odomfixer(filepath):
@@ -149,6 +153,7 @@ def gpsfixer(filepath):
 
 
 def pathfixer(filepath):
+    global ds_num
     path = []
     Paths = []
     with open(filepath, "r") as file:
@@ -162,7 +167,7 @@ def pathfixer(filepath):
             Paths.append(path)
             path = []
     
-    Paths = pathDownsample(Paths, 1000)
+    Paths = pathDownsample(Paths, ds_num)
     print(f"Paths.shape:{Paths.shape}")
 
     X = Paths[:,0]
@@ -175,7 +180,7 @@ if __name__ == "__main__":
 
     filepath = "gps1.txt"
     filepath2 = "path1.txt"
-
+    showFig = False
 
     gps = gpsfixer(filepath)
     #odom = odomfixer(filepath2)
