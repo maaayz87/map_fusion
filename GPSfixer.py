@@ -6,7 +6,7 @@ import numpy as np
 from scipy.interpolate import interp1d
 from scipy.spatial import procrustes
 
-ds_num = 1000
+
 
 #对齐odom和gps，获取对齐所需变换
 def pathsAlign(odom, gps):
@@ -135,10 +135,7 @@ def gpsfixer(filepath):
     fixedGPS = []
 
     for i, gps in enumerate(GPSs):
-        #print(f"lat:{gps[0]},lon:{gps[1]}")
-        #x, y = millerToXY(gps[0], gps[1])
         x, y = millerToXY(gps[1], gps[0])
-        #print(f"x:{x},y:{y}")
         fixedGPS.append([x, y, gps[2]])
 
     #fixedGPS = pathDownsample(fixedGPS, len(fixedGPS)//100*100)
@@ -181,6 +178,7 @@ if __name__ == "__main__":
     filepath = "gps1.txt"
     filepath2 = "path1.txt"
     showFig = False
+    ds_num = 1000
 
     gps = gpsfixer(filepath)
     #odom = odomfixer(filepath2)

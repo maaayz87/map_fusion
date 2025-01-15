@@ -50,16 +50,17 @@ if __name__ == '__main__':
     fixed_path2 = fixed_path2 + translation + trans_offset
     fixed_gps2 = fixed_gps2 + translation + trans_offset
 
+
     X1,Y1,Z1 = fixed_path1[:,0], fixed_path1[:,1], fixed_path1[:,2]
     X2,Y2,Z2 = fixed_path2[:,0], fixed_path2[:,1], fixed_path2[:,2]
-    #绘图
+    #粗匹配效果
     fig,ax = plt.subplots()
     ax.plot(X1,Y1)
     ax.plot(X2,Y2)
     ax.set_aspect('equal')
     plt.show()
 
-    #应用std
+    #应用std，精匹配效果
     R = np.array([
       [0.997193, 0.0740147, -0.011311],
       [-0.0730337, 0.994807, 0.0708822],
@@ -67,6 +68,7 @@ if __name__ == '__main__':
     ])
     t = np.array([-5.43945, 1.05476, -1.20451])
     fixed_path2 = (R @ fixed_path2.T).T + t
+
     X2,Y2,Z2 = fixed_path2[:,0], fixed_path2[:,1], fixed_path2[:,2]
     print("after STD")
     fig,ax = plt.subplots()
@@ -83,7 +85,7 @@ if __name__ == '__main__':
     # plt.show()
 
 
-    #gps
+    #gps效果
     X1,Y1,Z1 = fixed_gps1[:,0], fixed_gps1[:,1], fixed_gps1[:,2]
     X2,Y2,Z2 = fixed_gps2[:,0], fixed_gps2[:,1], fixed_gps2[:,2]
 

@@ -217,9 +217,6 @@ if __name__ == '__main__':
     path1 = "./path1.txt"
     path2 = "./path2.txt"
 
-    #算法参数
-    icp_max_iter = 10000
-    icp_tolerance = 0.001
     search_pair_num = 50
     total_num = search_pair_num * 2
     search_radius = 10 #15good
