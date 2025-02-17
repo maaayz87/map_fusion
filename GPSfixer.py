@@ -6,6 +6,9 @@ import numpy as np
 from scipy.interpolate import interp1d
 from scipy.spatial import procrustes
 
+#ds_num = 1000
+showFig = False
+
 
 
 #对齐odom和gps，获取对齐所需变换
@@ -37,6 +40,7 @@ def pathsAlign(odom, gps):
 
 #分别对odom和gps路径做插值下采样
 def pathDownsample(path, target_points_num):
+    
     path = np.array(path)
     N, D = path.shape
 
@@ -129,7 +133,7 @@ def gpsfixer(filepath):
                 sgGPS.append(float(num))
             elif line.startswith("---"):
                 GPSs.append(sgGPS)
-                print(sgGPS)
+                #print(sgGPS)
                 sgGPS = []
     
     fixedGPS = []
@@ -137,10 +141,12 @@ def gpsfixer(filepath):
     for i, gps in enumerate(GPSs):
         x, y = millerToXY(gps[1], gps[0])
         fixedGPS.append([x, y, gps[2]])
+    
+    ds_num = len(fixedGPS * 10) 
 
     #fixedGPS = pathDownsample(fixedGPS, len(fixedGPS)//100*100)
     fixedGPS = pathDownsample(fixedGPS, ds_num)
-    print(f"fixedGPS.shape:{fixedGPS.shape}")
+    print(f"fixedGPS.shape: {fixedGPS.shape}")
 
     X = fixedGPS[:,0]
     Y = fixedGPS[:,1]
@@ -163,7 +169,7 @@ def pathfixer(filepath):
             path.append(z)
             Paths.append(path)
             path = []
-    
+
     Paths = pathDownsample(Paths, ds_num)
     print(f"Paths.shape:{Paths.shape}")
 
@@ -177,8 +183,6 @@ if __name__ == "__main__":
 
     filepath = "gps1.txt"
     filepath2 = "path1.txt"
-    showFig = False
-    ds_num = 1000
 
     gps = gpsfixer(filepath)
     #odom = odomfixer(filepath2)

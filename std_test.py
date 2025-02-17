@@ -72,12 +72,10 @@ if __name__ == '__main__':
     fusion_save_path = "afterSTD.pcd"
 
     
-    #获取转换为绝对xy坐标的原始gps数据
     origin_gps1 = gfx.gpsfixer(gps1_path)
-    origin_gps2 = gfx.gpsfixer(gps2_path)
-
-    #获取建图得到的原始odom数据
     origin_path1 = gfx.pathfixer(path1)
+
+    origin_gps2 = gfx.gpsfixer(gps2_path)
     origin_path2 = gfx.pathfixer(path2)
 
 
@@ -104,11 +102,11 @@ if __name__ == '__main__':
 
     ################
     R = np.array([
-      [0.997193, 0.0740147, -0.011311],
-      [-0.0730337, 0.994807, 0.0708822],
-      [0.0164986, -0.0698571, 0.997421]
+      [0.996033, 0.0855639, 0.0244253],
+      [-0.0849626, 0.996079, -0.0246771],
+      [-0.026441, 0.022504, 0.999397]
     ])
-    t = np.array([-5.43945, 1.05476, -1.20451])
+    t = np.array([-5.20736, 1.24065, 1.13551])
 
     #将变换应用到第二张地图
     pc2_array = (R @ pc2_array.T).T + t

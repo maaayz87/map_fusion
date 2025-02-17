@@ -160,7 +160,7 @@ def icpPointsPick(pc1, pc2, gps1, gps2, pair_num, radius):
         pc1_filename = os.path.join(save_path, f"{i :06d}.bin")  # 确保是六位数
         pc1_chunk.astype(np.float32).tofile(pc1_filename)
         # 保存 pc2 的局部点云
-        pc2_filename = os.path.join(save_path, f"{i + search_pair_num:06d}.bin")  # 确保是六位数
+        pc2_filename = os.path.join(save_path, f"{i+search_pair_num:06d}.bin")  # 确保是六位数
         pc2_chunk.astype(np.float32).tofile(pc2_filename)
         print(' '*20, end='\r')
         print(f"{(i+1)*2}-{total_num}", end='\r')
@@ -219,15 +219,13 @@ if __name__ == '__main__':
 
     search_pair_num = 50
     total_num = search_pair_num * 2
-    search_radius = 10 #15good
-    voxel_size = 4
+    search_radius = 10
     
-    #获取转换为绝对xy坐标的原始gps数据
-    origin_gps1 = gfx.gpsfixer(gps1_path)
-    origin_gps2 = gfx.gpsfixer(gps2_path)
 
-    #获取建图得到的原始odom数据
+    origin_gps1 = gfx.gpsfixer(gps1_path)
     origin_path1 = gfx.pathfixer(path1)
+
+    origin_gps2 = gfx.gpsfixer(gps2_path)
     origin_path2 = gfx.pathfixer(path2)
 
 
@@ -278,7 +276,7 @@ if __name__ == '__main__':
     # pc2_ds_array = pcToArray(pc2_ds)
 
     #FPFH特征提取
-    fpfh = pcl.features.FPFHEstimation.PointXYZ_Normal_FPFHSignature33()
+    #fpfh = pcl.features.FPFHEstimation.PointXYZ_Normal_FPFHSignature33()
 
     #点云块选取
     #icp_pc = icpPointsPick(pc1ds_array, pc2_ds_array, origin_gps1, origin_gps2, search_pair_num, search_radius
