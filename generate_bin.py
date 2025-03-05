@@ -9,6 +9,7 @@ import open3d as o3d
 import pycuda.driver as cuda
 import pycuda.autoinit
 from pycuda.compiler import SourceModule
+import struct
 
 import GPSfixer as gfx
 import os
@@ -109,6 +110,13 @@ def radiusSearch(pc, point, radius):
     indices = pc_tree.query_ball_point(point,radius)
     nearby_points = pc[indices]
     return nearby_points
+def radiusSearchRGB(pc, point, radius):
+    # 在点云中搜索以 point 为中心半径为 radius 内的点
+    pc_xyz = np.column_stack((pc['x'], pc['y'], pc['z']))
+    pc_tree = KDTree(pc_xyz)
+    nearby_indices = pc_tree.query_ball_point(point, radius)
+    nearby_points = pc[nearby_indices]
+    return nearby_points
 
 
 def icpPointsPick(pc1, pc2, gps1, gps2, pair_num, radius):
@@ -140,8 +148,13 @@ def icpPointsPick(pc1, pc2, gps1, gps2, pair_num, radius):
     for i in range(len(mid_points)):
         #对pc1初始点去偏置并搜索
         mid_fix = mid_points[i] - gps1[0]
-        icp_pc1 = radiusSearch(pc1,mid_fix,radius)
-        icp_pc2 = radiusSearch(pc2,mid_fix,radius)
+        if isIntensity:
+            icp_pc1 = radiusSearch(pc1,mid_fix,radius)
+            icp_pc2 = radiusSearch(pc2,mid_fix,radius)
+        else:
+            icp_pc1 = radiusSearchRGB(pc1,mid_fix,radius)
+            icp_pc2 = radiusSearchRGB(pc2,mid_fix,radius)
+
         icp_pc.append([icp_pc1,icp_pc2])
         print(' '*20, end='\r')
         print(f"{i+1}-{pair_num}", end='\r')
@@ -156,14 +169,28 @@ def icpPointsPick(pc1, pc2, gps1, gps2, pair_num, radius):
     dada = icp_pc[0][0]
     print(f"dimension: {dada.shape}")
     for i, (pc1_chunk, pc2_chunk) in enumerate(icp_pc):
-        # 保存 pc1 的局部点云
-        pc1_filename = os.path.join(save_path, f"{i :06d}.bin")  # 确保是六位数
-        pc1_chunk.astype(np.float32).tofile(pc1_filename)
-        # 保存 pc2 的局部点云
-        pc2_filename = os.path.join(save_path, f"{i+search_pair_num:06d}.bin")  # 确保是六位数
-        pc2_chunk.astype(np.float32).tofile(pc2_filename)
-        print(' '*20, end='\r')
-        print(f"{(i+1)*2}-{total_num}", end='\r')
+        if isIntensity:
+            # 保存 pc1 的局部点云
+            pc1_filename = os.path.join(save_path, f"{i :06d}.bin")  # 确保是六位数
+            pc1_chunk.astype(np.float32).tofile(pc1_filename)
+            # 保存 pc2 的局部点云
+            pc2_filename = os.path.join(save_path, f"{i+search_pair_num:06d}.bin")  # 确保是六位数
+            pc2_chunk.astype(np.float32).tofile(pc2_filename)
+            print(' '*20, end='\r')
+            print(f"{(i+1)*2}-{total_num}", end='\r')
+        else:
+            # 将结构化数组转换为普通的二维数组
+            pc1_chunk_flat = np.column_stack((pc1_chunk['x'], pc1_chunk['y'], pc1_chunk['z'], pc1_chunk['rgb']))
+            pc2_chunk_flat = np.column_stack((pc2_chunk['x'], pc2_chunk['y'], pc2_chunk['z'], pc2_chunk['rgb']))
+
+            # 保存 pc1 的局部点云
+            pc1_filename = os.path.join(save_path, f"{i:06d}.bin")  # 确保是六位数
+            pc1_chunk_flat.astype(np.float32).tofile(pc1_filename)
+            # 保存 pc2 的局部点云
+            pc2_filename = os.path.join(save_path, f"{i + search_pair_num:06d}.bin")  # 确保是六位数
+            pc2_chunk_flat.astype(np.float32).tofile(pc2_filename)
+            print(' ' * 20, end='\r')
+            print(f"{(i + 1) * 2}-{total_num}", end='\r')
     print(f"std bin Saved !!!!!")
 
     return icp_pc
@@ -171,21 +198,39 @@ def icpPointsPick(pc1, pc2, gps1, gps2, pair_num, radius):
 
 
 #点云转换成numpy数组
-def pcToArray(point_cloud):
-    point_list = []
-    for point in point_cloud.points:
-        point_list.append([point.x, point.y, point.z, point.intensity])
-    point_array = np.asarray(point_list)
+def pcToArray(point_cloud, IorR):
+    if IorR:
+        point_list = []
+        for point in point_cloud.points:
+            point_list.append([point.x, point.y, point.z, point.intensity])
+        point_array = np.asarray(point_list)
+    else:
+        
+        dtype = [('x', 'f4'), ('y', 'f4'), ('z', 'f4'), ('rgb', 'f4')]  # f4: float32, u4: uint32
+        point_array = np.zeros(len(point_cloud.points), dtype=dtype)
+        for i, point in enumerate(point_cloud.points):
+            #print(type(point.rgb))#这里怎么读没区别，因为原本pcd里存的就是float形式的，在python这已经不对了。
+            # rgb_value = np.uint32(point.rgb)
+            # point_array[i] = (point.x, point.y, point.z, rgb_value)
+            point_array[i] = (point.x, point.y, point.z, point.rgb)
+
     return point_array
 
 
 #numpy数组转换成点云
-def arrayToPC(point_array, origin_cloud):
-    for i in range(len(point_array)):
-        origin_cloud.points[i].x = point_array[i][0]
-        origin_cloud.points[i].y = point_array[i][1]
-        origin_cloud.points[i].z = point_array[i][2]
-        origin_cloud.points[i].intensity = point_array[i][3]
+def arrayToPC(point_array, origin_cloud, IorR):
+    if IorR:
+        for i in range(len(point_array)):
+            origin_cloud.points[i].x = point_array[i][0]
+            origin_cloud.points[i].y = point_array[i][1]
+            origin_cloud.points[i].z = point_array[i][2]
+            origin_cloud.points[i].intensity = point_array[i][3]
+    else:
+        for i in range(len(point_array)):
+            origin_cloud.points[i].x = point_array[i]['x']
+            origin_cloud.points[i].y = point_array[i]['y']
+            origin_cloud.points[i].z = point_array[i]['z']
+            origin_cloud.points[i].rgb = point_array[i]['rgb']
     return origin_cloud
 
 
@@ -203,24 +248,56 @@ def pcdHandler(pcd_path, IorR):
     print("Reading PCD file: ",pcd_path)
     pcdreader.read(pcd_path, point_cloud)
 
+
+
+
+    # for point in point_cloud.points:
+    #     print("type of x:",type(point.x))
+    #     print("type of rgb:",type(point.rgb))
+    #     print("type of r:",type(point.r))
+    #     rgb_uint32 = struct.unpack('I', struct.pack('f', point.rgb))[0]# 将float转换为 32 位二进制字符串
+        
+    #     binary_str = format(rgb_uint32, 'b')
+    #     print("RGB (binary):", binary_str)
+
+    #     r = int(point.r)
+    #     g = int(point.g)
+    #     b = int(point.b)
+    #     print(f"r,g,b:",r,g,b)
+
+    #     fixed_rgb = (int(255) << 24) | (r << 16) | (g << 8) | b #手动填入rgb
+    #     binary_str1 = format(fixed_rgb, 'b')
+    #     print("fixed rgb:", binary_str1)
+    #     point.rgb = struct.unpack('f', struct.pack('I', fixed_rgb))[0] # 将无符号整数转换为 float（保留二进制位表示），并赋值回 point.rgb
+
+    #     print("type of x:",type(point.x))
+    #     print("type of rgb:",type(point.rgb))
+    #     print("type of r:",type(point.r))
+    #     rgb_uint32 = struct.unpack('I', struct.pack('f', point.rgb))[0]
+    #     binary_str = format(rgb_uint32, 'b')
+    #     print("RGB (binary):", binary_str)
+
+    #     print("---------------")
+
+
     return point_cloud
 
 
 if __name__ == '__main__':
     #文件路径参数
-    pcd1_path = "./map1/GlobalMap.pcd"
-    pcd2_path = "./map2/GlobalMap.pcd"
+    pcd1_path = "./map1/laserRGBMap.pcd"
+    pcd2_path = "./map2/laserRGBMap.pcd"
     odom1_path = "./odom1.txt"
     odom2_path = "./odom2.txt"
     gps1_path = "./gps1.txt"
     gps2_path = "./gps2.txt"
-    path1 = "./path1.txt"
-    path2 = "./path2.txt"
+    path1 = "./map1/path.txt"
+    path2 = "./map2/path.txt"
 
-    search_pair_num = 50
+    search_pair_num = 25
     total_num = search_pair_num * 2
-    search_radius = 10
-    
+    search_radius = 20
+    isIntensity = False
 
     origin_gps1 = gfx.gpsfixer(gps1_path)
     origin_path1 = gfx.pathfixer(path1)
@@ -234,19 +311,26 @@ if __name__ == '__main__':
     R2, fixed_gps2 = gfx.pathsAlign(origin_path2, origin_gps2)
 
     #获取原始区域点云地图
-    pc1 = pcdHandler(pcd1_path, True)
-    pc2 = pcdHandler(pcd2_path, True)
+    pc1 = pcdHandler(pcd1_path, isIntensity)
+    pc2 = pcdHandler(pcd2_path, isIntensity)
 
     #先转换成numpy数组做变换处理
-    pc1_array = pcToArray(pc1)
-    pc2_array = pcToArray(pc2)
+    pc1_array = pcToArray(pc1, isIntensity)
+    pc2_array = pcToArray(pc2, isIntensity)
 
 
     # 提取 xyz 和 intensity #myz
-    pc1_xyz = pc1_array[:, :3]  # 取前三列
-    pc2_xyz = pc2_array[:, :3]
-    pc1_intensity = pc1_array[:, 3]  # 取第4列
-    pc2_intensity = pc2_array[:, 3]
+    if isIntensity:
+        pc1_xyz = pc1_array[:, :3]  # 取前三列
+        pc2_xyz = pc2_array[:, :3]
+        pc1_intensity = pc1_array[:, 3]  # 取第4列
+        pc2_intensity = pc2_array[:, 3]
+    else:
+        # 提取 xyz 和 rgb #myz
+        pc1_xyz = np.column_stack((pc1_array['x'], pc1_array['y'], pc1_array['z']))
+        pc2_xyz = np.column_stack((pc2_array['x'], pc2_array['y'], pc2_array['z']))
+        pc1_rgb = pc1_array['rgb']
+        pc2_rgb = pc2_array['rgb']
 
     # 对 xyz 进行旋转和偏移
     pc1_xyz = (R1 @ pc1_xyz.T).T
@@ -258,8 +342,27 @@ if __name__ == '__main__':
     pc2_xyz[:, 2] += origin_gps2[0][2] - origin_gps1[0][2]
 
     # 合并 xyz 和 intensity #myz
-    pc1_array = np.hstack((pc1_xyz, pc1_intensity.reshape(-1, 1)))
-    pc2_array = np.hstack((pc2_xyz, pc2_intensity.reshape(-1, 1)))
+    if isIntensity:
+        pc1_array = np.hstack((pc1_xyz, pc1_intensity.reshape(-1, 1)))
+        pc2_array = np.hstack((pc2_xyz, pc2_intensity.reshape(-1, 1)))
+    else:
+        # 合并 xyz 和 rgb #myz
+        dtype = [('x', 'f4'), ('y', 'f4'), ('z', 'f4'), ('rgb', 'f4')]  # f4: float32, u4: uint32
+        pc1_array = np.zeros(len(pc1_xyz), dtype=dtype)
+        pc2_array = np.zeros(len(pc2_xyz), dtype=dtype)
+
+        pc1_array['x'] = pc1_xyz[:, 0]
+        pc1_array['y'] = pc1_xyz[:, 1]
+        pc1_array['z'] = pc1_xyz[:, 2]
+        pc1_array['rgb'] = pc1_rgb
+
+        pc2_array['x'] = pc2_xyz[:, 0]
+        pc2_array['y'] = pc2_xyz[:, 1]
+        pc2_array['z'] = pc2_xyz[:, 2]
+        pc2_array['rgb'] = pc2_rgb
+
+
+
 
     # #将初变换后点云转回pcl格式
     # pc1_fixed = arrayToPC(pc1_array, pc1)
